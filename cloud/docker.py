@@ -654,12 +654,14 @@ class DockerManager:
 
             # ignore PATH
             if 'PATH' in container_env:
-              del container_env['PATH']
+                del container_env['PATH']
 
             if container_config.get('Image') != image:
                 return True
 
-        return self.env_var_changed(self.module.params.get('env'), container_env)
+            return self.env_var_changed(self.module.params.get('env'), container_env)
+
+        return False
 
     def env_var_changed(self, input_env, container_env):
         if len(input_env) != len(container_env):
