@@ -643,6 +643,35 @@ class DockerManager:
 
         return containers
 
+    def restart_named_container(self, existing_container):
+        if existing_container:
+            container_config = existing_container.get('Config', dict())
+            container_env = container_config.get('Env')
+            image = self.module.params.get('image')
+
+            # convert from array to dict
+            container_env = dict(env_var.split('=') for env_var in container_env)
+
+            # ignore PATH
+            if 'PATH' in container_env:
+              del container_env['PATH']
+
+            if container_config.get('Image') != image:
+                return True
+
+        return self.env_var_changed(self.module.params.get('env'), container_env)
+
+    def env_var_changed(self, input_env, container_env):
+        if len(input_env) != len(container_env):
+            return True
+
+        for key, value in input_env.iteritems():
+            if container_env.get(key):
+                if str(container_env.get(key)) != value:
+                  return True
+
+        return False
+
     def start_containers(self, containers):
         params = {
             'lxc_conf': self.lxc_conf,
@@ -779,8 +808,8 @@ def main():
                         break
 
                 # the named container is running, but with a
-                # different image or tag, so we stop it first
-                if existing_container and existing_container.get('Config', dict()).get('Image') != image:
+                # different image, tag or env vars, so we stop it first
+                if manager.restart_named_container(existing_container):
                     manager.stop_containers([existing_container])
                     manager.remove_containers([existing_container])
                     running_containers = manager.get_running_containers()
