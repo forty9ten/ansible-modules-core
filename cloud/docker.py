@@ -645,25 +645,87 @@ class DockerManager:
 
     def restart_named_container(self, existing_container):
         if existing_container:
-            container_config = existing_container.get('Config', dict())
-            container_env = container_config.get('Env')
-            image = self.module.params.get('image')
-
-            # convert from array to dict
-            container_env = dict(env_var.split('=') for env_var in container_env)
-
-            # ignore PATH
-            if 'PATH' in container_env:
-                del container_env['PATH']
-
-            if container_config.get('Image') != image:
-                return True
-
-            return self.env_var_changed(self.module.params.get('env'), container_env)
+             return (self.image_changed(existing_container) or
+                     self.env_changed(existing_container) or
+                     self.vol_changed(existing_container) or
+                     self.ports_changed(existing_container))
 
         return False
 
-    def env_var_changed(self, input_env, container_env):
+    def ports_changed(self, existing_container):
+        container_net = existing_container.get('NetworkSettings', dict())
+        container_ports = (container_net.get('Ports', dict()) or {})
+        ports = (self.module.params.get('ports') or [])
+        if len(ports) != len(container_ports):
+            return True
+
+        # loop through each ansible config try to find a matchig docker config
+        # return False if unable to match
+        for port in ports:
+            num_colons = port.count(":")
+            parts      = port.split(":")
+
+            host_ip, host_port, remote_port = "", None, None
+
+            if num_colons == 1:
+                host_port, remote_port = parts[0], parts[1]
+
+            if num_colons == 2:
+                host_ip, host_port, remote_port = parts[0], parts[1], parts[2]
+
+            # default to tcp if not specified, default docker behavior
+            if "/" not in remote_port:
+                remote_port = remote_port + "/tcp"
+
+            found = False
+
+            # break out the loop if found a matching config
+            for container_port, container_host_info in container_ports.iteritems():
+                if container_port == remote_port:
+                    if (host_port == container_host_info[0]['HostPort'] and
+                        host_ip == container_host_info[0]['HostIp']):
+                        found = True
+                        break
+
+            if not found:
+                return True
+
+        return False
+
+    def image_changed(self, existing_container):
+        container_config = existing_container.get('Config', dict())
+        image = self.module.params.get('image')
+
+        if container_config.get('Image') != image:
+            return True
+
+        return False
+
+    def vol_changed(self, existing_container):
+        container_vol = existing_container.get('Volumes', dict())
+
+        # convert from list to dict
+        volumes = dict(vol.split(':') for vol in self.module.params.get('volumes') or [])
+
+        # reverse the input keys to match the container's structure
+        volumes = dict((v,k) for k,v in volumes.iteritems())
+
+        return self.key_val_changed(volumes, container_vol)
+
+    def env_changed(self, existing_container):
+        container_config = existing_container.get('Config', dict())
+        container_env = container_config.get('Env')
+
+        # convert from list to dict
+        container_env = dict(env_var.split('=') for env_var in container_env)
+
+        # ignore PATH
+        if 'PATH' in container_env:
+            del container_env['PATH']
+
+        return self.key_val_changed(self.module.params.get('env') or {}, container_env)
+
+    def key_val_changed(self, input_env, container_env):
         if len(input_env) != len(container_env):
             return True
 
@@ -671,6 +733,8 @@ class DockerManager:
             if container_env.get(key):
                 if str(container_env.get(key)) != value:
                   return True
+            else:
+                return True
 
         return False
 
