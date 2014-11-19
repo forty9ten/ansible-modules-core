@@ -39,7 +39,7 @@ options:
     version_added: "1.5"
   mode:
     description:
-      - Specify the direction of the synchroniztion. In push mode the localhost or delegate is the source; In pull mode the remote host in context is the source.
+      - Specify the direction of the synchronization. In push mode the localhost or delegate is the source; In pull mode the remote host in context is the source.
     required: false
     choices: [ 'push', 'pull' ]
     default: 'push'
@@ -180,7 +180,9 @@ local_action: synchronize src=some/relative/path dest=/some/absolute/path
 pull mode
 synchronize: mode=pull src=some/relative/path dest=/some/absolute/path
 
-# Synchronization of src on delegate host to dest on the current inventory host
+# Synchronization of src on delegate host to dest on the current inventory host.
+# If delegate_to is set to the current inventory host, this can be used to syncronize
+# two directories on that host. 
 synchronize: >
     src=some/relative/path dest=/some/absolute/path
     delegate_to: delegate.host

@@ -394,8 +394,24 @@ class LinuxService(Service):
             location[binary] = self.module.get_bin_path(binary)
 
         def check_systemd(name):
-            # verify service is managed by systemd
-            if not location.get('systemctl', None):
+            # verify systemd is installed (by finding systemctl)
+            if not location.get('systemctl', False):
+                return False
+
+            systemd_enabled = False
+            # Check if init is the systemd command, using comm as cmdline could be symlink
+            try:
+                f = open('/proc/1/comm', 'r')
+            except IOError, err:
+                # If comm doesn't exist, old kernel, no systemd
+                return False
+
+            for line in f:
+                if 'systemd' in line:
+                    systemd_enabled = True
+                    break
+
+            if not systemd_enabled:
                 return False
 
             # default to .service if the unit type is not specified
@@ -501,7 +517,33 @@ class LinuxService(Service):
         (rc, out, err) = self.execute_command("%s show %s" % (self.enable_cmd, self.__systemd_unit,))
         if rc != 0:
             self.module.fail_json(msg='failure %d running systemctl show for %r: %s' % (rc, self.__systemd_unit, err))
-        return dict(line.split('=', 1) for line in out.splitlines())
+        key = None
+        value_buffer = []
+        status_dict = {}
+        for line in out.splitlines():
+            if not key:
+                key, value = line.split('=', 1)
+                # systemd fields that are shell commands can be multi-line
+                # We take a value that begins with a "{" as the start of
+                # a shell command and a line that ends with "}" as the end of
+                # the command
+                if value.lstrip().startswith('{'):
+                    if value.rstrip().endswith('}'):
+                        status_dict[key] = value
+                        key = None
+                    else:
+                        value_buffer.append(value)
+                else:
+                    status_dict[key] = value
+                    key = None
+            else:
+                if line.rstrip().endswith('}'):
+                    status_dict[key] = '\n'.join(value_buffer)
+                    key = None
+                else:
+                    value_buffer.append(value)
+
+        return status_dict
 
     def get_systemd_service_status(self):
         d = self.get_systemd_status_dict()

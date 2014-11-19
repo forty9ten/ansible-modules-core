@@ -27,7 +27,7 @@ options:
     description:
      - Indicate desired state of the target.
     default: present
-    choices: ['present', 'active', 'absent', 'deleted']
+    choices: ['present', 'absent']
   client_id:
      description:
      - DigitalOcean manager id.
@@ -145,7 +145,7 @@ class Domain(JsonfyMixIn):
             return False
 
         domains = Domain.list_all()
-        
+
         if id is not None:
             for domain in domains:
                 if domain.id == id:
@@ -181,7 +181,7 @@ def core(module):
 
         if not domain:
             domain = Domain.find(name=getkeyordie("name"))
-            
+
         if not domain:
             domain = Domain.add(getkeyordie("name"),
                                 getkeyordie("ip"))
@@ -203,10 +203,10 @@ def core(module):
         domain = None
         if "id" in module.params:
             domain = Domain.find(id=module.params["id"])
-                
+
         if not domain and "name" in module.params:
             domain = Domain.find(name=module.params["name"])
-                
+
         if not domain:
             module.exit_json(changed=False, msg="Domain not found.")
 
@@ -217,7 +217,7 @@ def core(module):
 def main():
     module = AnsibleModule(
         argument_spec = dict(
-            state = dict(choices=['active', 'present', 'absent', 'deleted'], default='present'),
+            state = dict(choices=['present', 'absent'], default='present'),
             client_id = dict(aliases=['CLIENT_ID'], no_log=True),
             api_key = dict(aliases=['API_KEY'], no_log=True),
             name = dict(type='str'),
